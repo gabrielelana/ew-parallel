@@ -15,7 +15,22 @@ defmodule Parallel do
   def map(enumerable, f) do
     enumerable
     |> Enum.map(&Task.async(fn -> f.(&1) end))
-    |> Enum.map(&Task.await/1)
+    |> collect
+  end
+
+  defp collect(tasks, results \\ [])
+
+  defp collect([], results), do: results |> Enum.reverse
+  defp collect(tasks, results) do
+    receive do
+      message ->
+        case Task.find(tasks, message) do
+          {result, task} ->
+            collect(List.delete(tasks, task), [result|results])
+          nil ->
+            collect(tasks, results)
+        end
+    end
   end
 end
 
@@ -25,4 +40,3 @@ end
 |> Enum.map(fn _ -> :random.uniform(1_000) end)
 |> Parallel.map(&Waste.ms/1)
 |> IO.inspect
-
