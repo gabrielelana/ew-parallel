@@ -14,8 +14,11 @@ end
 defmodule Parallel do
   def map(enumerable, f) do
     enumerable
-    |> Enum.map(&Task.async(fn -> f.(&1) end))
+    |> Enum.zip(1..Enum.count(enumerable))
+    |> Enum.map(&Task.async(fn -> {f.(elem(&1, 0)), elem(&1, 1)} end))
     |> collect
+    |> Enum.sort_by(&elem(&1, 1))
+    |> Enum.map(&elem(&1, 0))
   end
 
   defp collect(tasks, results \\ [])
@@ -38,5 +41,6 @@ end
 
 0..10
 |> Enum.map(fn _ -> :random.uniform(1_000) end)
+|> IO.inspect
 |> Parallel.map(&Waste.ms/1)
 |> IO.inspect
