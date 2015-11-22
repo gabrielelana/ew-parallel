@@ -4,21 +4,25 @@ defmodule Fibonacci do
   def of(n), do: of(n - 1) + of(n - 2)
 end
 
-defmodule Parallel do
-  def map(enumerable, f) do
-    me = self
-    enumerable
-    |> Enum.map(fn(e) ->
-                  spawn_link(fn -> send me, {self, f.(e)} end)
-                end)
-    |> Enum.map(fn(pid) ->
-                  receive do {^pid, result} -> result end
-                end)
+defmodule Waste do
+  def ms(n) do
+    :timer.sleep(n)
+    n
   end
 end
 
-0..35
-# |> Enum.map(&Fibonacci.of/1)
-|> Parallel.map(&Fibonacci.of/1)
+defmodule Parallel do
+  def map(enumerable, f) do
+    enumerable
+    |> Enum.map(&Task.async(fn -> f.(&1) end))
+    |> Enum.map(&Task.await/1)
+  end
+end
+
+:random.seed(:os.timestamp)
+
+0..10
+|> Enum.map(fn _ -> :random.uniform(1_000) end)
+|> Parallel.map(&Waste.ms/1)
 |> IO.inspect
 
