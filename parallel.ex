@@ -14,8 +14,16 @@ end
 defmodule Parallel do
   def map(enumerable, f, opts \\ []) do
     enumerable
-    |> Enum.map(&Task.async(fn -> f.(&1) end))
+    |> Enum.map(&task(&1, f))
     |> collect(Keyword.get(opts, :timeout, 5_000))
+  end
+
+  defp task(e, f) do
+    me = self
+    reference = make_ref
+    pid = spawn(fn -> send(me, {reference, f.(e)}) end)
+    Process.monitor(pid)
+    {reference, pid}
   end
 
   defp collect(tasks, timeout) do
@@ -41,10 +49,18 @@ defmodule Parallel do
       {:timeout, ^reference} ->
         {:timeout, length(results), results |> Enum.reverse}
 
-      message ->
-        case Task.find(tasks, message) do
-          {result, task} ->
-            collect(List.delete(tasks, task), [result|results], reference)
+      {task, result} ->
+        case List.keytake(tasks, task, 0) do
+          {_, tasks} ->
+            collect(tasks, [result|results], reference)
+          nil ->
+            collect(tasks, results, reference)
+        end
+
+      {:"DOWN", _, _, pid, _} ->
+        case List.keytake(tasks, pid, 1) do
+          {_, tasks} ->
+            collect(tasks, [:error|results], reference)
           nil ->
             collect(tasks, results, reference)
         end
@@ -55,6 +71,6 @@ end
 :random.seed(:os.timestamp)
 
 0..10
-|> Enum.map(fn _ -> :random.uniform(2_000) + 1_000 end)
+|> Enum.map(fn _ -> :random.uniform(1_000) - 500 end)
 |> Parallel.map(&Waste.ms/1, timeout: 2_000)
 |> IO.inspect
